@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""End-to-end demonstration (the "most important demo").
+
+  examples/run-demo [--reps N]
+
+1. the valid candidate (library-rule inlining + novel deforestation and
+   fold/build fusion lemmas with their Lean proofs): PROOF PASS -> benchmarked against the reference;
+2. two deliberately incorrect but faster candidates that reuse the valid proof,
+   and a hostile optimizer that forges a library-rule step:
+   PROOF FAIL -> BENCHMARK BLOCKED;
+3. candidate A + proof A = PASS; change one semantic line, reuse proof A = FAIL;
+   change one comment byte, reuse proof A = FAIL; re-prove it = PASS.
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+from _common import ROOT, banner  # noqa: E402
+import bench
+from bendverify import verify as V
+from bendverify.competition import load
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--reps", type=int, default=5)
+a = ap.parse_args()
+comp = load(self_check=True)
+W = os.path.join(ROOT, "work", "demo")
+os.makedirs(W, exist_ok=True)
+
+
+def run(*cmd):
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{cmd} failed:\n{r.stdout}\n{r.stderr}")
+    return r.stdout
+
+
+def materialize(example, name, prove=True, proof_from=None):
+    d = os.path.join(W, name)
+    run(os.path.join(ROOT, "examples", "materialize"), os.path.join(ROOT, "examples", example), d)
+    if proof_from:
+        shutil.copytree(os.path.join(proof_from, "proof"), os.path.join(d, "proof"))
+    run(os.path.join(ROOT, "competitor-sdk", "tools", "prove-candidate"), d, *([] if prove else ["--no-prove"]))
+    return d
+
+
+def package(d):
+    out = d + ".tar.zst"
+    run(os.path.join(ROOT, "scripts", "package-submission"), d, "-o", out)
+    return out
+
+
+def contest(title, arc):
+    print(f"\n=== {title}")
+    rep = V.verify(arc, log=lambda *x: None)
+    if rep["result"] != "VALID":
+        print(f"proof verification = FAIL   ({rep['stage']}: {rep['reason'].splitlines()[0][:150]})")
+        print("benchmark          = BLOCKED (never run)")
+        return rep, None
+    print("proof verification = PASS")
+    b = bench.benchmark(arc, reps=a.reps, log=lambda *x: None)
+    for w, res in b["workloads"].items():
+        for k, r in res.items():
+            print(f"{w} {k}: REFERENCE {r['reference_s']}s  CANDIDATE {r['candidate_s']}s  "
+                  f"speedup = {r['speedup']}x   (output {r['output']})")
+    return rep, b
+
+
+print(f"competition {comp['competition_id']}")
+print(comp["guarantee"]["text"])
+valid = materialize("valid-optimization", "valid")
+contest("VALID candidate: inline (library rule) + deforestation / fold-build fusion (novel lemmas, Lean proofs)", package(valid))
+for ex in ("hardcoded-answer", "seed-dropped"):
+    d = materialize(f"invalid-optimization/{ex}", ex, prove=False, proof_from=valid)
+    contest(f"INVALID but faster candidate '{ex}' reusing the valid proof", package(d))
+d = materialize("malicious-submission", "malicious", prove=False)
+contest("MALICIOUS optimizer (sandbox escapes + forged library-rule step)", package(d))
+
+print("\n=== proof binding")
+one = os.path.join(W, "one-line")
+shutil.rmtree(one, ignore_errors=True)
+shutil.copytree(valid, one)
+p = os.path.join(one, "bend", "bend2", "opt", "optimize.mjs")
+src = open(p).read()
+line = 'return ["par", ["call", F, e[1][2]], ["call", F, e[2][2]], lift(arm[3], 4, -1)];'
+open(p, "w").write(src.replace(line, 'return ["par", ["call", F, e[2][2]], ["call", F, e[1][2]], lift(arm[3], 4, -1)];'))
+run(os.path.join(ROOT, "competitor-sdk", "tools", "prove-candidate"), one, "--no-prove")
+r1 = V.verify(package(one), log=lambda *x: None)
+com = os.path.join(W, "comment")
+shutil.rmtree(com, ignore_errors=True)
+shutil.copytree(valid, com)
+with open(os.path.join(com, "bend", "bend2", "opt", "optimize.mjs"), "a") as f:
+    f.write("// a comment\n")
+r2 = V.verify(package(com), log=lambda *x: None)
+run(os.path.join(ROOT, "competitor-sdk", "tools", "prove-candidate"), com)
+r3 = V.verify(package(com), log=lambda *x: None)
+banner([("candidate A + proof A", "PASS"),
+        ("one semantic line changed + proof A", "PASS" if r1["result"] == "VALID" else f"FAIL ({r1['stage']})"),
+        ("one comment byte changed + proof A", "PASS" if r2["result"] == "VALID" else f"FAIL ({r2['stage']})"),
+        ("comment change, re-proved", "PASS" if r3["result"] == "VALID" else f"FAIL ({r3['stage']})")])

@@ -1,0 +1,9 @@
+name = "checker"
+defaultTargets = ["bendverify-check"]
+
+[[lean_lib]]
+name = "Checker"
+
+[[lean_exe]]
+name = "bendverify-check"
+root = "Checker"

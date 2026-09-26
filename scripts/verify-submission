@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Independently verify a submission package.
+
+  scripts/verify-submission submission.tar.zst [--json]
+
+Exit status 0 iff the proof is VALID and the candidate is ELIGIBLE; the
+printed report (and the stored certificate.json) is the verdict.
+"""
+import argparse
+import json
+import sys
+
+from _common import banner
+from bendverify import verify as V
+from bendverify.competition import CompetitionError
+
+ap = argparse.ArgumentParser()
+ap.add_argument("archive")
+ap.add_argument("--json", action="store_true")
+a = ap.parse_args()
+try:
+    rep = V.verify(a.archive, log=(lambda *x: None) if a.json else print)
+except (CompetitionError, V.Reject) as e:
+    print(f"verifier refused to run: {e}")
+    sys.exit(2)
+if a.json:
+    print(json.dumps(rep, indent=1))
+ok = rep["result"] == "VALID"
+lines = [("Competition", rep["competition_id"]),
+         ("Candidate", rep.get("candidate_repo_hash", "(not computed)")),
+         ("Guarantee", "Claim B (VerifiedIR equivalence) - NOT Claim C (native executable)"),
+         ("Proof", "VALID" if ok else "INVALID"),
+         ("Eligible", "YES" if ok else "NO")]
+if not ok:
+    lines.append(("Rejected at", f"{rep['stage']}: {rep['reason']}"))
+else:
+    lines.append(("Certificate", rep["certificate"]))
+print()
+banner(lines)
+sys.exit(0 if ok else 1)

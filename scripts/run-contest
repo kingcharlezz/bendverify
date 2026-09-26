@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Verify, then (only on PASS) benchmark the exact verified artifact.
+
+  scripts/run-contest submission.tar.zst [--reps N]
+"""
+import argparse
+import sys
+
+from _common import banner
+import bench
+from bendverify import verify as V
+from bendverify.competition import CompetitionError, load
+
+ap = argparse.ArgumentParser()
+ap.add_argument("archive")
+ap.add_argument("--reps", type=int, default=None)
+a = ap.parse_args()
+try:
+    comp = load(self_check=True)
+    print("== verification ==")
+    rep = V.verify(a.archive)
+except (CompetitionError, V.Reject) as e:
+    print(f"refused to run: {e}")
+    sys.exit(2)
+out = [("competition_id", rep["competition_id"]),
+       ("candidate_hash", rep.get("candidate_repo_hash", "(not computed)")),
+       ("guarantee", "B (VerifiedIR equivalence); C (native executable) NOT claimed")]
+if rep["result"] != "VALID":
+    out += [("proof_valid", "false"), ("semantics_preserved", "not established"),
+            ("rejected_at", f"{rep['stage']}: {rep['reason']}"),
+            ("benchmark", "BLOCKED (never run)"), ("eligible", "false")]
+    print("\n== result ==")
+    banner(out)
+    sys.exit(1)
+print("\n== benchmark ==")
+try:
+    b = bench.benchmark(a.archive, reps=a.reps or comp["rules"]["benchmark"]["reps"])
+except bench.Refuse as e:
+    out += [("proof_valid", "true"), ("benchmark", f"BLOCKED: {e}"), ("eligible", "false")]
+    print("\n== result ==")
+    banner(out)
+    sys.exit(1)
+out += [("proof_valid", "true"), ("semantics_preserved", "true (kernel-checked BendVerify.Equiv)")]
+for w, res in b["workloads"].items():
+    for k, r in res.items():
+        out += [(f"{w} {k} reference_time", f"{r['reference_s']}s"),
+                (f"{w} {k} candidate_time", f"{r['candidate_s']}s"),
+                (f"{w} {k} speedup", f"{r['speedup']}x")]
+out += [("score (threads=%d)" % comp["rules"]["benchmark"]["score_threads"], f"{b['score_speedup']}x"),
+        ("eligible", "true")]
+print("\n== result ==")
+banner(out)

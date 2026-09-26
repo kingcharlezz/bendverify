@@ -1,0 +1,6 @@
+name = "exporter"
+defaultTargets = ["bendverify-export"]
+
+[[lean_exe]]
+name = "bendverify-export"
+root = "Exporter"

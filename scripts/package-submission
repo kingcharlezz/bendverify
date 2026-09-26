@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Build a canonical submission package.
+
+  scripts/package-submission <candidate-dir> [-o submission.tar.zst]
+
+<candidate-dir> must contain:
+  bend/             the modified Bend repository (no .git)
+  proof/            the proof export and any informational sources
+  submission.json   {"proof": {"export": <file|null>, "imports": [...]},
+                     "workloads": {<name>: {"candidate_ir_hash": ...}}}
+The tool computes the competition id, the candidate and proof digests and writes
+manifest.json into a deterministic .tar.zst. Every digest it writes is only a
+CLAIM: verify-submission recomputes all of them.
+"""
+import argparse
+import json
+import os
+import shutil
+import tempfile
+
+from _common import ROOT  # noqa: F401
+from bendverify import archive
+from bendverify.competition import canon_hash, load as load_competition
+
+ap = argparse.ArgumentParser()
+ap.add_argument("candidate")
+ap.add_argument("-o", "--output", default="submission.tar.zst")
+a = ap.parse_args()
+comp = load_competition(self_check=False)
+src = os.path.abspath(a.candidate)
+for need in ("bend", "proof", "submission.json"):
+    if not os.path.exists(os.path.join(src, need)):
+        raise SystemExit(f"{a.candidate}: missing {need}")
+if os.path.exists(os.path.join(src, "bend", ".git")):
+    raise SystemExit("bend/ must not contain .git (package the working tree only)")
+sub = json.load(open(os.path.join(src, "submission.json")))
+cand, _ = canon_hash.tree_digest(os.path.join(src, "bend"))
+proof, _ = canon_hash.tree_digest(os.path.join(src, "proof"))
+manifest = {"schema": "bendverify-submission-v1", "competition_id": comp["competition_id"],
+            "reference_commit": comp["rules"]["reference_commit"], "candidate_repo_hash": cand,
+            "proof_hash": proof, "proof": sub["proof"], "workloads": sub["workloads"]}
+with tempfile.TemporaryDirectory() as t:
+    stage = os.path.join(t, "s")
+    os.makedirs(stage)
+    shutil.copytree(os.path.join(src, "bend"), os.path.join(stage, "bend"), symlinks=True)
+    shutil.copytree(os.path.join(src, "proof"), os.path.join(stage, "proof"), symlinks=True)
+    with open(os.path.join(stage, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=1, sort_keys=True)
+    archive.pack(stage, a.output)
+print(f"candidate_repo_hash: {cand}\nproof_hash:          {proof}\npackage:             {a.output} "
+      f"({canon_hash.file_digest(a.output)})")

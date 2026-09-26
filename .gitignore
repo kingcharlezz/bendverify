@@ -1,0 +1,7 @@
+.lake/
+__pycache__/
+*.pyc
+/store/
+/out/
+/work/
+.DS_Store

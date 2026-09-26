@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bendverify:manifest-v1",
+  "title": "Submission manifest (written by scripts/package-submission; every digest is a claim that the verifier recomputes)",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "competition_id", "reference_commit", "candidate_repo_hash", "proof_hash", "proof", "workloads"],
+  "properties": {
+    "schema": {"const": "bendverify-submission-v1"},
+    "competition_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "reference_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "candidate_repo_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "proof": {"type": "object", "additionalProperties": false, "required": ["export", "imports"],
+              "properties": {"export": {"type": ["string", "null"]}, "imports": {"type": "array", "items": {"type": "string"}}}},
+    "workloads": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false,
+                  "required": ["candidate_ir_hash"], "properties": {"candidate_ir_hash": {"type": "string"}}}}
+  }
+}

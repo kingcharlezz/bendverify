@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""Organizer tool: freeze one competition version into competition.json.
+
+  scripts/make-competition
+
+1. checks that reference/bend is a clean checkout of the pinned commit and
+   records every tracked file (trusted/spec/reference_tree.json);
+2. extracts every workload's reference VerifiedIR with the trusted extractor
+   and pins its digest;
+3. records Base's names (for the lowering's collision check);
+4. pins the digest of every trusted file, the toolchain identities and the
+   rules, and computes the competition id.
+
+Run once per competition version; afterwards any change to a trusted file
+makes the verifier refuse to run until a new version is frozen.
+"""
+import json
+import os
+import subprocess
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(ROOT, "trusted", "verifier"))
+from bendverify import competition as C  # noqa: E402
+from bendverify.competition import canon_hash  # noqa: E402
+
+REF_COMMIT = "574b6d39a235b539eb19a5c532993a0abb3d11ad"
+LEAN_TC = os.environ.get("BENDVERIFY_LEAN_TOOLCHAIN", os.path.expanduser("~/.elan/toolchains/leanprover--lean4---v4.27.0"))
+NODE = os.environ.get("BENDVERIFY_NODE", "node")
+CLANG = os.environ.get("BENDVERIFY_CLANG", "clang")
+IMAGE = "node:24-bookworm-slim"
+
+
+def sh(*a, **k):
+    return subprocess.run(a, capture_output=True, text=True, check=True, **k).stdout
+
+
+def main():
+    ref = os.path.join(ROOT, "reference", "bend")
+    head = sh("git", "-C", ref, "rev-parse", "HEAD").strip()
+    if head != REF_COMMIT or sh("git", "-C", ref, "status", "--porcelain").strip():
+        sys.exit("reference/bend must be a clean checkout of " + REF_COMMIT)
+    files = {}
+    for line in sh("git", "-C", ref, "ls-files", "-s").splitlines():
+        mode, _, _, path = line.split(None, 3)
+        full = os.path.join(ref, path)
+        files[path] = [mode == "100755", canon_hash.file_digest(full)]
+    entries = [canon_hash.TreeEntry(p, e, d, 0) for p, (e, d) in files.items()]
+    entries.sort(key=lambda t: t.path.encode())
+    tree = {"commit": REF_COMMIT, "digest": canon_hash.tree_digest_of(entries), "files": files}
+    with open(os.path.join(ROOT, "trusted", "spec", "reference_tree.json"), "w") as f:
+        json.dump(tree, f, indent=0, sort_keys=True)
+    bend2 = os.path.join(ref, "bend2")
+    names = subprocess.run([NODE, os.path.join(ROOT, "trusted/verifier/bend/base_names.mjs"), bend2],
+                           capture_output=True, text=True, check=True).stdout
+    with open(os.path.join(ROOT, "trusted", "spec", "base_names.json"), "w") as f:
+        f.write(names)
+
+    workloads = []
+    for name, entry, sanity, inputs in [
+        ("tree-radix", "run",
+         [[["8", "0"], "366571299"], [["22", "0"], "1998173798"], [["0", "0"], None],
+          [["1", "7"], None], [["5", "4294967295"], None], [["10", "123456789"], None]],
+         [["22", "0"]]),
+        ("lexer", "run",
+         [[["8", "0"], "1822208108"], [["23", "0"], "2401049475"], [["0", "0"], None],
+          [["3", "5"], None], [["6", "4294967295"], None], [["10", "987654"], None]],
+         [["23", "0"]]),
+    ]:
+        src = f"trusted/spec/workloads/{name}/workload.bend"
+        ir_path = f"trusted/spec/workloads/{name}/reference.ir.json"
+        out = subprocess.run([NODE, os.path.join(ROOT, "trusted/verifier/bend/extract.mjs"), bend2,
+                              os.path.join(ROOT, src), entry, os.path.join(ROOT, ir_path)],
+                             capture_output=True, text=True)
+        if out.returncode != 0:
+            sys.exit(f"extraction failed: {out.stdout}{out.stderr}")
+        with open(os.path.join(ROOT, ir_path)) as f:
+            ir = json.load(f)
+        with open(os.path.join(ROOT, ir_path), "w") as f:
+            json.dump(ir, f)
+        workloads.append({
+            "name": name, "entry": entry, "source": src,
+            "source_hash": canon_hash.file_digest(os.path.join(ROOT, src)),
+            "provenance": f"bench/runtime/{name}/main.bend at {REF_COMMIT} (definitions verbatim; "
+                          "main replaced by the entry `run`)",
+            "reference_ir": ir_path, "reference_ir_hash": canon_hash.json_digest(ir),
+            "sanity": sanity, "benchmark_inputs": inputs,
+        })
+
+    image_id = sh("docker", "image", "inspect", IMAGE, "--format", "{{.Id}}").strip()
+    lean_v = sh(os.path.join(LEAN_TC, "bin", "lean"), "--version").strip()
+    rules = {
+        "reference_commit": REF_COMMIT,
+        "reference_tree_digest": tree["digest"],
+        "normalization": {"tree": "bendverify-tree-v1 (trusted/hasher/canon_hash.py)",
+                          "json": "bendverify-json-v1 canonical JSON (sorted keys, no whitespace, UTF-8, NFC, ints only)"},
+        "hash_algorithm": "sha256",
+        "submission_schema": "bendverify-submission-v1 (trusted/schema/submission.py)",
+        "ir_schema": "verifiedir-v1 (trusted/schema/verifiedir.py)",
+        "allowed_modifications": ["bend2/opt/"],
+        "optimizer": {"entry": "bend2/opt/optimize.mjs", "image": IMAGE, "image_id": image_id,
+                      "limits": {"seconds": 300, "memory_mb": 2048, "cpus": 2, "pids": 256,
+                                 "out_mb": 64, "tmp_mb": 64}},
+        "library_rules": ["fold", "caseCtr", "natLit", "inline"],
+        "max_steps": 1000,
+        "trusted_imports": ["Init", "BendVerify", "Contest.Obligation"],
+        "allowed_axioms": ["propext", "Quot.sound", "Classical.choice"],
+        "targets": ["native C (reference comp.ts) compiled by the pinned clang with -std=c11 -O3, CPU "
+                    "threads only (no GPU/Metal/CUDA, no JS)"],
+        "workloads": workloads,
+        "benchmark": {"configs": [{"threads": 1}, {"threads": 8}], "score_threads": 1, "reps": 5,
+                      "statistic": "median wall-clock, reference and candidate alternated"},
+        "guarantee": "B",
+        "assumptions": [
+            "The Lean 4 kernel (pinned version) is sound.",
+            "BendVerify's definitions (Syntax, Semantics, Equiv) state the intended semantics of VerifiedIR.",
+            "The extractor maps a checked Bend program to VerifiedIR with the same meaning (including the "
+            "meaning of each Base primitive given by Prim.eval).",
+            "The pinned reference Bend checker, compiler (comp.ts) and C runtime, clang, macOS and the "
+            "hardware execute the lowered program according to that meaning (Nat values stay below 2^48).",
+            "The sandbox (Docker/colima, macOS sandbox-exec) contains the competitor optimizer.",
+        ],
+    }
+    table = C.file_table()
+    hashes = {f"{g}_hash": C.group_digest(t) for g, t in table.items()}
+    hashes["rules_hash"] = canon_hash.json_digest(rules)
+    comp = {
+        "schema": "bendverify-competition-v1",
+        "name": "BendVerify VerifiedIR optimisation, version 1",
+        "guarantee": {"level": "B", "text": (
+            "Claim B: the exact candidate VerifiedIR is formally (Lean-kernel-checked) equivalent to the "
+            "pinned reference VerifiedIR for all well-typed inputs. NOT Claim C: the native executable is "
+            "not proven to implement Bend semantics.")},
+        "toolchain": {"lean": "v4.27.0", "lean_commit": lean_v.split("commit ")[1].split(",")[0],
+                      "node": sh(NODE, "--version").strip(),
+                      "clang": sh(CLANG, "--version").splitlines()[0].strip(),
+                      "optimizer_image_id": image_id},
+        "rules": rules,
+        "trusted_files": table,
+        "hashes": hashes,
+    }
+    comp["competition_id"] = C.competition_id(hashes["spec_hash"], hashes["verifier_hash"],
+                                              hashes["benchmark_hash"], hashes["rules_hash"])
+    with open(C.COMPETITION_FILE, "w") as f:
+        json.dump(comp, f, indent=1, sort_keys=True)
+        f.write("\n")
+    print("competition_id", comp["competition_id"])
+
+
+if __name__ == "__main__":
+    main()

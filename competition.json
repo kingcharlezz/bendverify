@@ -1,0 +1,262 @@
+{
+ "competition_id": "sha256:0df4bd2c614a57d08f01c09f92af39c123ecfe423c858bbe572a7f4ff62477b8",
+ "guarantee": {
+  "level": "B",
+  "text": "Claim B: the exact candidate VerifiedIR is formally (Lean-kernel-checked) equivalent to the pinned reference VerifiedIR for all well-typed inputs. NOT Claim C: the native executable is not proven to implement Bend semantics."
+ },
+ "hashes": {
+  "benchmark_hash": "sha256:49215b879c044058b67331eb6a477950d9bae3c6a0122e479c474dd3bc96e914",
+  "rules_hash": "sha256:4d1506cde3e1206c74920206c00ca4f9c86ce29333bcd75657fae0815e000a52",
+  "spec_hash": "sha256:8af1a70c17a1910ebfe1cd79076727f1b398e09c14464c1d07e512ad28813b05",
+  "verifier_hash": "sha256:b111eadb2c886acecd45381279ad7caf2f86e569bf571df1371facbd1d0d32b8"
+ },
+ "name": "BendVerify VerifiedIR optimisation, version 1",
+ "rules": {
+  "allowed_axioms": [
+   "propext",
+   "Quot.sound",
+   "Classical.choice"
+  ],
+  "allowed_modifications": [
+   "bend2/opt/"
+  ],
+  "assumptions": [
+   "The Lean 4 kernel (pinned version) is sound.",
+   "BendVerify's definitions (Syntax, Semantics, Equiv) state the intended semantics of VerifiedIR.",
+   "The extractor maps a checked Bend program to VerifiedIR with the same meaning (including the meaning of each Base primitive given by Prim.eval).",
+   "The pinned reference Bend checker, compiler (comp.ts) and C runtime, clang, macOS and the hardware execute the lowered program according to that meaning (Nat values stay below 2^48).",
+   "The sandbox (Docker/colima, macOS sandbox-exec) contains the competitor optimizer."
+  ],
+  "benchmark": {
+   "configs": [
+    {
+     "threads": 1
+    },
+    {
+     "threads": 8
+    }
+   ],
+   "reps": 5,
+   "score_threads": 1,
+   "statistic": "median wall-clock, reference and candidate alternated"
+  },
+  "guarantee": "B",
+  "hash_algorithm": "sha256",
+  "ir_schema": "verifiedir-v1 (trusted/schema/verifiedir.py)",
+  "library_rules": [
+   "fold",
+   "caseCtr",
+   "natLit",
+   "inline"
+  ],
+  "max_steps": 1000,
+  "normalization": {
+   "json": "bendverify-json-v1 canonical JSON (sorted keys, no whitespace, UTF-8, NFC, ints only)",
+   "tree": "bendverify-tree-v1 (trusted/hasher/canon_hash.py)"
+  },
+  "optimizer": {
+   "entry": "bend2/opt/optimize.mjs",
+   "image": "node:24-bookworm-slim",
+   "image_id": "sha256:03eae3ef7e88a9de535496fb488d67e02b9d96a063a8967bae657744ecd513f2",
+   "limits": {
+    "cpus": 2,
+    "memory_mb": 2048,
+    "out_mb": 64,
+    "pids": 256,
+    "seconds": 300,
+    "tmp_mb": 64
+   }
+  },
+  "reference_commit": "574b6d39a235b539eb19a5c532993a0abb3d11ad",
+  "reference_tree_digest": "sha256:8482b2e5ba5315d517a8c74a1100ebb58f72f06bab14dde74b5de9f3962f65a7",
+  "submission_schema": "bendverify-submission-v1 (trusted/schema/submission.py)",
+  "targets": [
+   "native C (reference comp.ts) compiled by the pinned clang with -std=c11 -O3, CPU threads only (no GPU/Metal/CUDA, no JS)"
+  ],
+  "trusted_imports": [
+   "Init",
+   "BendVerify",
+   "Contest.Obligation"
+  ],
+  "workloads": [
+   {
+    "benchmark_inputs": [
+     [
+      "22",
+      "0"
+     ]
+    ],
+    "entry": "run",
+    "name": "tree-radix",
+    "provenance": "bench/runtime/tree-radix/main.bend at 574b6d39a235b539eb19a5c532993a0abb3d11ad (definitions verbatim; main replaced by the entry `run`)",
+    "reference_ir": "trusted/spec/workloads/tree-radix/reference.ir.json",
+    "reference_ir_hash": "sha256:46a9bebf4072534a22083fde7e0cf33c9ff83aef244a860f349c6598629d871a",
+    "sanity": [
+     [
+      [
+       "8",
+       "0"
+      ],
+      "366571299"
+     ],
+     [
+      [
+       "22",
+       "0"
+      ],
+      "1998173798"
+     ],
+     [
+      [
+       "0",
+       "0"
+      ],
+      null
+     ],
+     [
+      [
+       "1",
+       "7"
+      ],
+      null
+     ],
+     [
+      [
+       "5",
+       "4294967295"
+      ],
+      null
+     ],
+     [
+      [
+       "10",
+       "123456789"
+      ],
+      null
+     ]
+    ],
+    "source": "trusted/spec/workloads/tree-radix/workload.bend",
+    "source_hash": "sha256:c62a111a6e8cf7abd51d5f2a5a0045fec79151d997ac0cf22071e6ca53c15b24"
+   },
+   {
+    "benchmark_inputs": [
+     [
+      "23",
+      "0"
+     ]
+    ],
+    "entry": "run",
+    "name": "lexer",
+    "provenance": "bench/runtime/lexer/main.bend at 574b6d39a235b539eb19a5c532993a0abb3d11ad (definitions verbatim; main replaced by the entry `run`)",
+    "reference_ir": "trusted/spec/workloads/lexer/reference.ir.json",
+    "reference_ir_hash": "sha256:5ad5f9235091bba29e85ce6749ae07080c1cdb61f17a9dca2fb5b51027094b96",
+    "sanity": [
+     [
+      [
+       "8",
+       "0"
+      ],
+      "1822208108"
+     ],
+     [
+      [
+       "23",
+       "0"
+      ],
+      "2401049475"
+     ],
+     [
+      [
+       "0",
+       "0"
+      ],
+      null
+     ],
+     [
+      [
+       "3",
+       "5"
+      ],
+      null
+     ],
+     [
+      [
+       "6",
+       "4294967295"
+      ],
+      null
+     ],
+     [
+      [
+       "10",
+       "987654"
+      ],
+      null
+     ]
+    ],
+    "source": "trusted/spec/workloads/lexer/workload.bend",
+    "source_hash": "sha256:1138467411382718be9ee4ad878906d17d5d73ba135e4871ac9b6e77edb512cd"
+   }
+  ]
+ },
+ "schema": "bendverify-competition-v1",
+ "toolchain": {
+  "clang": "Apple clang version 16.0.0 (clang-1600.0.26.6)",
+  "lean": "v4.27.0",
+  "lean_commit": "db93fe1608548721853390a10cd40580fe7d22ae",
+  "node": "v24.4.1",
+  "optimizer_image_id": "sha256:03eae3ef7e88a9de535496fb488d67e02b9d96a063a8967bae657744ecd513f2"
+ },
+ "trusted_files": {
+  "benchmark": {
+   "trusted/benchmark/bench.py": "sha256:43e5d9890f1ff676d2ef43ccf3e62cf741e3d2820f44ac3054dba11310ed0fff"
+  },
+  "spec": {
+   "trusted/spec/base_names.json": "sha256:f4c1216550d1441d599d7ad559b1a4248af4bd8f4d054dae92059120eee045cc",
+   "trusted/spec/lean/BendVerify.lean": "sha256:cff17225f0601c4b0a87bf7c0a596f809965853e29fca136b7b01a02293ff028",
+   "trusted/spec/lean/BendVerify/Equiv.lean": "sha256:7d32a598e63539af076671104679bb6500456330041850953ee99d15a3af072c",
+   "trusted/spec/lean/BendVerify/Lemmas.lean": "sha256:917a170927fb1892ef0c475ef36af6e45fd7e16c2390704d9dca592c6e8aa5d1",
+   "trusted/spec/lean/BendVerify/Lift.lean": "sha256:df71e3661585f6e72a24ef98b0a0c1093410cc341670158c37f12b782f594eef",
+   "trusted/spec/lean/BendVerify/Rules.lean": "sha256:d7a05e49dea0f450bd7c879b32d9d97ef046df8a6bf1d5af5ce292fc5538c236",
+   "trusted/spec/lean/BendVerify/Semantics.lean": "sha256:eca1055e314b62c64c4477cd1f23df8c8b88f3b1b8b831529c5a9dc363c9188e",
+   "trusted/spec/lean/BendVerify/Simulate.lean": "sha256:1b192ea5edc176c4ffc472dc8fe3b4d4f4983f09dec5e245660471a4d42a0a7c",
+   "trusted/spec/lean/BendVerify/Support.lean": "sha256:03a4a8c7e63cf00d2c64add11dc1d9c0af9f286e8be4de275267cee01934cc94",
+   "trusted/spec/lean/BendVerify/Syntax.lean": "sha256:30e62ff29fe5e17bf74886c553885e0d146d09fc6a3116d86a5eb11bea909d63",
+   "trusted/spec/lean/lakefile.toml": "sha256:a59f3dd7ec0c51d3e0db476333630eaa19dbfaeaa4c5be73718fa7b72491a216",
+   "trusted/spec/lean/lean-toolchain": "sha256:d55ca0039a5479db5b38919d005b2c427b89b3be4f0184a20f2f4eae931f5bdb",
+   "trusted/spec/reference_tree.json": "sha256:22a25b0fa9130e695752864932d7f8084b7cb46585ba42c072b762edc0f41dd1",
+   "trusted/spec/workloads/lexer/reference.ir.json": "sha256:bde0c742420a54e62adad062c23b28c8b9f14734a9de9d6e2278d40f6e46389c",
+   "trusted/spec/workloads/lexer/workload.bend": "sha256:1138467411382718be9ee4ad878906d17d5d73ba135e4871ac9b6e77edb512cd",
+   "trusted/spec/workloads/tree-radix/reference.ir.json": "sha256:3f3fe4b9a743b2ae28002ba85879519605b850d06c107a50a019dde5c859f9c4",
+   "trusted/spec/workloads/tree-radix/workload.bend": "sha256:c62a111a6e8cf7abd51d5f2a5a0045fec79151d997ac0cf22071e6ca53c15b24"
+  },
+  "verifier": {
+   "scripts/_common.py": "sha256:ae4eb7792f0a7cb6ac5c9881dcda49479fd2191b7ba853c8d9c18986f1c49be6",
+   "scripts/benchmark-submission": "sha256:69cfafdbdbeedc3e843996f6a9beeb6b132e6c0826c1f03c32f5eb4ce50dfe72",
+   "scripts/make-competition": "sha256:fd2b3e3dac74afae1fc80c6f92680d3f94b314837aaec9e185c8d86dece54882",
+   "scripts/package-submission": "sha256:52c36a0cc9f02e88e461455ca80ff468f6fa3e56a4633abdc4d20f6c063e016a",
+   "scripts/run-contest": "sha256:7b75562fb408ca35d284b73f5d1460e83883e3fa36e818ba9b72375c3a9f6c10",
+   "scripts/verify-submission": "sha256:3949b81e6fc02ab2238040604f6a507bddfc6139ba82cc2c2ead36e22b244f9d",
+   "trusted/hasher/canon_hash.py": "sha256:1e69f960c392d03242ee988098dd34a14e072f6d34f3ab9f54c8019e1140cef8",
+   "trusted/proof-generator/obligation.py": "sha256:6af745fcb5776a291086752005a749f5ed45ab040c61684806b820291ebe4ab0",
+   "trusted/schema/submission.py": "sha256:177010564c4f90b0b147344342d525a0255827515a0222836cb59e32a48b2c04",
+   "trusted/schema/verifiedir.py": "sha256:6d26357baa0ba91e8db3d80ccf79996d136256d6730f170f608f483c9588d625",
+   "trusted/verifier/bend/base_names.mjs": "sha256:8b49dc6f00603acf89e2a6bb316ccb77b6935ad6d70b3eceecbc492daa37e874",
+   "trusted/verifier/bend/compile.mjs": "sha256:93e7625a3b605b8522e6bdbedfa9f40fd04ab0d745186d507a36d74171263503",
+   "trusted/verifier/bend/extract.mjs": "sha256:81d5653b853614dd7a8ff9ea8c35f0d3efee1e030e536c7074e982f1f8c0205a",
+   "trusted/verifier/bend/lower.py": "sha256:a0d84764bb94d8c4f50059efe65ac0406ceb036f0e5fc8fd6b700e3ecd746685",
+   "trusted/verifier/bend/roundtrip.py": "sha256:31c525eeae879227edac566ebfa9404c3444e78972257c365d3a97db8a6a00c6",
+   "trusted/verifier/bendverify/__init__.py": "sha256:d2ae0e1e99eb09a55c7822a11fe51c000109195126c18b6ce4f90321084227bb",
+   "trusted/verifier/bendverify/archive.py": "sha256:dcab3fa9b4ed8c0d4b8f6405be1fbe7481d0ef91676680606e70e7cba09adcc2",
+   "trusted/verifier/bendverify/bendtools.py": "sha256:f512d7c8b5b55e6f4d3e4a638e0b83837d4fd10f2e8e4779ffaed5ec735b9677",
+   "trusted/verifier/bendverify/competition.py": "sha256:a9b019069e15866b829ee87e7a9d5d834720c327e9e8814db4f8f897a5af4f06",
+   "trusted/verifier/bendverify/proofcheck.py": "sha256:adb43c8027cfa1e6f5fb4e19fd4946518a6fe51c5940cca16e7677d77020eec5",
+   "trusted/verifier/bendverify/sandbox.py": "sha256:d3b98829a8fcfff7233bda85e9841b61cc028a1e38cbeba2c3ddb1f3790a6ff6",
+   "trusted/verifier/bendverify/verify.py": "sha256:155b2909dc751d199a7df9679344712996560023457656ead40a83fa50b9dee4",
+   "trusted/verifier/checker/Checker.lean": "sha256:0dcb808fbcc0c78f8598da04f4eec7dee3e78650a82981f7da88b82ad9dfcabd",
+   "trusted/verifier/checker/Checker/Export.lean": "sha256:14fc1c12abe197a95f74d113618c2ce8252f07939254d657c6b17af7c64a6efa",
+   "trusted/verifier/checker/lakefile.toml": "sha256:40bb2ee4a4f819d32693f030a072b39d70331a8dc5afc5b16457a731cb4b1632",
+   "trusted/verifier/checker/lean-toolchain": "sha256:d55ca0039a5479db5b38919d005b2c427b89b3be4f0184a20f2f4eae931f5bdb"
+  }
+ }
+}

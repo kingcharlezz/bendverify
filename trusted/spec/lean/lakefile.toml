@@ -1,0 +1,5 @@
+name = "bendverify"
+defaultTargets = ["BendVerify"]
+
+[[lean_lib]]
+name = "BendVerify"

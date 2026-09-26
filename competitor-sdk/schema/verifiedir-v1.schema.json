@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bendverify:verifiedir-v1",
+  "title": "VerifiedIR v1 program (informational; the normative validator is trusted/schema/verifiedir.py)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "adts", "fns"],
+  "properties": {
+    "format": {"const": "verifiedir-v1"},
+    "adts": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/adt"}},
+    "fns": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/fn"}}
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$", "maxLength": 64},
+    "ty": {"oneOf": [{"const": "u32"}, {"const": "nat"},
+                     {"type": "array", "prefixItems": [{"const": "adt"}, {"type": "integer", "minimum": 0}], "items": false}]},
+    "adt": {"type": "object", "additionalProperties": false, "required": ["name", "ctors"],
+            "properties": {"name": {"$ref": "#/$defs/name"},
+                           "ctors": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                                     "required": ["name", "fields"],
+                                     "properties": {"name": {"$ref": "#/$defs/name"},
+                                                    "fields": {"type": "array", "items": {"$ref": "#/$defs/ty"}}}}}}},
+    "fn": {"type": "object", "additionalProperties": false, "required": ["name", "params", "ret", "body"],
+           "properties": {"name": {"$ref": "#/$defs/name"}, "params": {"type": "array", "items": {"$ref": "#/$defs/ty"}},
+                          "ret": {"$ref": "#/$defs/ty"}, "body": {"$ref": "#/$defs/expr"}}},
+    "expr": {"description": "[\"var\",i] | [\"u32\",k] | [\"nat\",k] | [\"prim\",name,[e]] | [\"ctr\",adt,tag,[e]] | [\"call\",f,[e]] | [\"let\",e,e] | [\"par\",e,e,e] | [\"mat\",adt,e,[[arity,e]]] | [\"natcase\",e,e,e]",
+             "type": "array", "minItems": 2}
+  }
+}

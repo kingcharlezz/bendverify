@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bendverify:chain-v1",
+  "title": "Certificate chain written by the optimizer (normative: trusted/schema/submission.py)",
+  "type": "object", "additionalProperties": false, "required": ["format", "workload", "steps"],
+  "properties": {
+    "format": {"const": "bendverify-chain-v1"},
+    "workload": {"type": "string"},
+    "steps": {"type": "array", "maxItems": 1000, "items": {"oneOf": [
+      {"type": "object", "additionalProperties": false, "required": ["kind", "fn", "path", "rule", "program"],
+       "properties": {"kind": {"const": "rule"}, "fn": {"type": "integer"}, "path": {"type": "array", "items": {"type": "integer"}},
+                      "rule": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["name"],
+                                          "properties": {"name": {"enum": ["inline", "caseCtr", "natLit"]}}},
+                                         {"type": "object", "additionalProperties": false, "required": ["name", "bool_adt"],
+                                          "properties": {"name": {"const": "fold"}, "bool_adt": {"type": "integer"}}}]},
+                      "program": {"type": "string", "pattern": "\\.ir\\.json$"}}},
+      {"type": "object", "additionalProperties": false, "required": ["kind", "proof", "program"],
+       "properties": {"kind": {"const": "lemma"}, "proof": {"type": "string"}, "program": {"type": "string", "pattern": "\\.ir\\.json$"}}}]}}
+  }
+}

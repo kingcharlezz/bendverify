@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Competitor-side proving workflow (UNTRUSTED convenience tool).
+
+  competitor-sdk/tools/prove-candidate <candidate-dir> [--no-prove]
+
+--no-prove keeps an existing proof/ directory untouched (creating an empty one if
+needed) and only recomputes the claims, even if the obligation does not compile
+(used by the examples that try to REUSE someone else's proof or forge a rule step).
+
+<candidate-dir>/
+  bend/                 your modified Bend repository (optimizer in bend2/opt/)
+  proof-src/            your Lean proof sources (module root), e.g. Submission/TreeRadix.lean
+  prove.json            {"modules": ["Submission.TreeRadix"]}
+
+Produces <candidate-dir>/proof/ (export.json + copies of the sources) and
+<candidate-dir>/submission.json, ready for scripts/package-submission.
+
+Steps: compute the candidate digest exactly as the verifier will; run your
+optimizer in the same pinned container the verifier uses; generate the proof
+obligation with the public generator and the candidate-specific stamp; compile
+your proofs against it; export the proof terms. Nothing here is trusted by
+the verifier: it regenerates the obligation itself and re-checks the
+exported terms in the Lean kernel.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(ROOT, "trusted", "verifier"))
+from bendverify import sandbox, verify as V  # noqa: E402  (public code, used as a library)
+from bendverify.competition import canon_hash, load as load_competition  # noqa: E402
+
+import obligation  # noqa: E402
+
+cand = os.path.abspath(sys.argv[1])
+NO_PROVE = "--no-prove" in sys.argv[2:]
+comp = load_competition(self_check=False)
+cid = comp["competition_id"]
+tc = V.toolchain(comp)
+cfg = json.load(open(os.path.join(cand, "prove.json"))) if not NO_PROVE else {}
+cand_hash, _ = canon_hash.tree_digest(os.path.join(cand, "bend"))
+print(f"candidate digest {cand_hash}")
+
+work = os.path.join(V.work_root(), "prove-" + os.urandom(6).hex())
+os.makedirs(work)
+try:
+    in_dir = os.path.join(work, "in")
+    os.makedirs(in_dir)
+    req = {"competition_id": cid, "workloads": []}
+    refs = {}
+    for w in comp["rules"]["workloads"]:
+        refs[w["name"]] = V.load_reference_ir(w)
+        with open(os.path.join(in_dir, f"{w['name']}.ir.json"), "w") as f:
+            json.dump(refs[w["name"]], f)
+        req["workloads"].append({"name": w["name"], "entry": w["entry"], "input": f"{w['name']}.ir.json"})
+    with open(os.path.join(in_dir, "request.json"), "w") as f:
+        json.dump(req, f)
+    out = os.path.join(work, "out")
+    res = sandbox.run_optimizer(os.path.join(cand, "bend"), in_dir, out, comp["rules"]["optimizer"])
+    if res["exit"] != 0:
+        sys.exit("optimizer failed:\n" + res["log"])
+    spec_lib = os.path.join(ROOT, "trusted", "spec", "lean", ".lake", "build", "lib", "lean")
+    subprocess.run([os.path.join(tc["lean_toolchain"], "bin", "lake"), "build"], check=True,
+                   cwd=os.path.join(ROOT, "trusted", "spec", "lean"),
+                   env={**os.environ, "PATH": os.path.join(tc["lean_toolchain"], "bin") + ":/usr/bin:/bin"})
+    claims, roots, obl_workloads = {}, [], []
+    for w in comp["rules"]["workloads"]:
+        wd = os.path.join(out, w["name"])
+        chain = json.load(open(os.path.join(wd, "chain.json")))
+        programs = [refs[w["name"]]] + [json.load(open(os.path.join(wd, s["program"]))) for s in chain["steps"]]
+        claims[w["name"]] = {"candidate_ir_hash": canon_hash.json_digest(programs[-1])}
+        fn = next(f for f in refs[w["name"]]["fns"] if f["name"] == w["entry"])
+        ctx = {"adts": refs[w["name"]]["adts"], "entry": w["entry"], "params": fn["params"], "ret": fn["ret"]}
+        obl_workloads.append({"name": w["name"], "ctx": ctx, "programs": programs, "steps": chain["steps"]})
+        roots += [s["proof"] for s in chain["steps"] if s["kind"] == "lemma"]
+        print(f"{w['name']}: {len(chain['steps'])} steps")
+    text, goals = obligation.generate(obl_workloads, f"bendverify/v1/{cid}/{cand_hash}")
+    print(f"lemma goals: {goals}")
+    obl = os.path.join(work, "obl")
+    os.makedirs(os.path.join(obl, "Contest"))
+    with open(os.path.join(obl, "Contest", "Obligation.lean"), "w") as f:
+        f.write(text)
+    lean = os.path.join(tc["lean_toolchain"], "bin", "lean")
+    env = {"LEAN_PATH": f"{spec_lib}:{obl}", "PATH": "/usr/bin:/bin"}
+    r = subprocess.run([lean, "-o", "Contest/Obligation.olean", "Contest/Obligation.lean"], cwd=obl, env=env,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        msg = "obligation does not compile (a library-rule step is wrong?):\n" + r.stdout + r.stderr
+        if not NO_PROVE:
+            sys.exit(msg)
+        # --no-prove: this tool is advisory; package anyway and let the verifier reject it.
+        print("WARNING: " + msg, file=sys.stderr)
+    proof_out = os.path.join(cand, "proof")
+    if NO_PROVE:
+        os.makedirs(proof_out, exist_ok=True)
+        exp = os.path.join(proof_out, "export.json")
+        imports = json.load(open(exp))["imports"] if os.path.isfile(exp) else []
+        with open(os.path.join(cand, "submission.json"), "w") as f:
+            json.dump({"proof": {"export": "export.json" if os.path.isfile(exp) else None,
+                                 "imports": imports}, "workloads": claims}, f, indent=1)
+        print("kept existing proof/; wrote submission.json")
+        sys.exit(0)
+    shutil.rmtree(proof_out, ignore_errors=True)
+    os.makedirs(proof_out)
+    imports = []
+    if roots:
+        src = os.path.join(work, "src")
+        shutil.copytree(os.path.join(cand, "proof-src"), src)
+        env = {"LEAN_PATH": f"{spec_lib}:{obl}:{src}",
+               "PATH": os.path.join(tc["lean_toolchain"], "bin") + ":/usr/bin:/bin"}
+        for m in cfg["modules"]:
+            rel = m.replace(".", "/")
+            r = subprocess.run([lean, "-o", rel + ".olean", rel + ".lean"], cwd=src, env=env,
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                sys.exit(f"proof module {m} does not compile:\n{r.stdout}{r.stderr}")
+        exporter = os.path.join(ROOT, "competitor-sdk", "exporter", ".lake", "build", "bin", "bendverify-export")
+        r = subprocess.run([exporter, os.path.join(proof_out, "export.json"), cfg["modules"][-1], *roots],
+                           env=env, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit("export failed:\n" + r.stderr)
+        print(r.stderr.strip())
+        imports = json.load(open(os.path.join(proof_out, "export.json")))["imports"]
+        shutil.copytree(os.path.join(cand, "proof-src"), os.path.join(proof_out, "src"),
+                        ignore=shutil.ignore_patterns("*.olean", "*.ilean", "*.c"))
+    with open(os.path.join(cand, "submission.json"), "w") as f:
+        json.dump({"proof": {"export": "export.json" if roots else None, "imports": imports},
+                   "workloads": claims}, f, indent=1)
+    print("wrote proof/ and submission.json")
+finally:
+    shutil.rmtree(work, ignore_errors=True)
