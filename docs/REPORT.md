@@ -140,8 +140,15 @@ cd thirdparty/repo
 ```
 
 This reproduction ran on the same machine (a clean copy, separate caches, work directory and
-artifact store); a second machine with the pinned toolchains was not available. On another
-machine every digest in the certificate except the native binary's is expected to match.
+artifact store); a second Mac with the pinned toolchains was not available. On another machine
+every digest in the certificate except the native binary's is expected to match.
+
+Cross-machine, the `integrity` GitHub Actions workflow re-checks on a clean Linux runner that
+every trusted file and the pinned Bend checkout hash to `competition.json` (the verifier's own
+start-up self-check, reproducing the competition id), and kernel-checks the specification and its
+proven rule library, and builds the replay checker and the exporter, with the pinned Lean v4.27.0
+(green on the published commit). The full pipeline cannot run there: it needs the macOS sandbox,
+Apple clang and the pinned arm64 container image.
 
 The verifier first recomputes the digest of every trusted file and the competition id and refuses
 to run on any mismatch, so a third party is checking with exactly the pinned verifier, not with
