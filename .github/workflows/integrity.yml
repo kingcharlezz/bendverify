@@ -1,0 +1,50 @@
+# Independent, cross-machine checks that need neither Docker nor the macOS toolchain:
+#  * every trusted file and the pinned Bend checkout hash to competition.json
+#    (the same self-check the verifier performs before every run);
+#  * the formal specification and its proven rule library kernel-check with the
+#    pinned Lean toolchain, and the replay checker builds.
+name: integrity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Trusted files and reference Bend tree match competition.json
+        working-directory: trusted/verifier
+        run: |
+          python3 - <<'PY'
+          from bendverify.competition import load
+          from bendverify import verify as V
+          comp = load(self_check=True)
+          V.check_reference_tree(comp)
+          print("competition", comp["competition_id"], "- all trusted files and the reference tree match")
+          PY
+
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Kernel-check the specification (BendVerify, pinned Lean)
+        working-directory: trusted/spec/lean
+        run: lake build
+      - name: Build the replay checker
+        working-directory: trusted/verifier/checker
+        run: lake build
+      - name: Build the competitor exporter
+        working-directory: competitor-sdk/exporter
+        run: lake build

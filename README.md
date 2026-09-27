@@ -1,5 +1,7 @@
 # BendVerify: proof-carrying compiler optimisation for Bend (proof of concept)
 
+[![integrity](https://github.com/kingcharlezz/bendverify/actions/workflows/integrity.yml/badge.svg)](https://github.com/kingcharlezz/bendverify/actions/workflows/integrity.yml)
+
 Competitors optimise Bend programs. A submission counts **only if an independent, immutable
 verifier establishes — with a Lean-kernel-checked proof — that the exact submitted code produces
 a program semantically equivalent to the reference**, and only then is *that exact artifact*
@@ -132,3 +134,13 @@ No output of the organiser's servers is trusted in this process.
 python3 -m unittest discover -s tests/adversarial -p "test_*.py" -v   # 51 attacks, ~20 min
 python3 -m unittest discover -s tests/integration -p "test_*.py" -v
 ```
+
+The `integrity` workflow re-checks, on a clean Linux machine, that every trusted file and the
+pinned Bend checkout hash to `competition.json`, and kernel-checks the specification with the
+pinned Lean. The full pipeline (Docker optimizer sandbox, `sandbox-exec`, Apple clang) needs the
+macOS setup above.
+
+## License
+
+Apache License 2.0 (`LICENSE`). The two benchmark workloads are derived from Bend
+(Apache-2.0); see `NOTICE`.

@@ -1,0 +1,18 @@
+BendVerify
+Copyright 2026 Charlie Holt
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes material derived from Bend (https://github.com/bendlang/bend),
+licensed under the Apache License, Version 2.0:
+
+  * trusted/spec/workloads/tree-radix/workload.bend and
+    trusted/spec/workloads/lexer/workload.bend contain the definitions of
+    bench/runtime/tree-radix/main.bend and bench/runtime/lexer/main.bend at Bend
+    commit 574b6d39a235b539eb19a5c532993a0abb3d11ad, modified: each program's
+    `main` is replaced by an entry function `run` taking its size and seed as
+    arguments (marked in each file);
+  * trusted/spec/workloads/*/reference.ir.json are mechanically extracted from
+    those programs, and examples/ contains programs derived from them.
+
+reference/bend is a git submodule referencing the unmodified upstream repository.
